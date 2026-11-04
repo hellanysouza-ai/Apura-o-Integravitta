@@ -289,7 +289,7 @@
         <label class="dropzone upload-box" id="boxAmil">
           <svg class="dz-icon" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
           <div class="op-name">AMIL</div>
-          <div class="op-sheet">abas "PF" e "PME" (ou "Base") · Data Implantação</div>
+          <div class="op-sheet">relatórios PF e PME · Data Implantação (ou Vigência da Proposta, quando não houver)</div>
           <div class="status" id="statusAmil">Clique para subir 1 ou mais relatórios (.xlsx)</div>
           <div class="file-chips" id="chipsAmil"></div>
           <input type="file" id="fileAmil" accept=".xlsx,.xls" multiple>
@@ -306,7 +306,7 @@
       <details class="criteria">
         <summary>Critérios de apuração</summary>
         <ul>
-          <li><strong>Amil:</strong> considera propostas com Situação = Implantada, filtradas pela Data Implantação. Por proposta, conta o maior valor entre os beneficiários de médico e de dental, porque são as mesmas vidas.</li>
+          <li><strong>Amil:</strong> considera propostas com Situação = Implantada, filtradas pela Data Implantação (se o relatório não tiver essa coluna, como no modelo PF atual, usa a Vigência da Proposta). Por proposta, conta o maior valor entre os beneficiários de médico e de dental, porque são as mesmas vidas.</li>
           <li><strong>Supermed:</strong> considera linhas com Status = Ativo, filtradas pelo Início Vigência, somando a coluna Quantidade Vidas.</li>
           <li><strong>Duplicidades:</strong> proposta repetida na Amil conta uma vez, inclusive entre arquivos diferentes. Na Supermed, conta uma vez a mesma proposta com o mesmo titular.</li>
           <li><strong>Valor:</strong> total de vidas multiplicado por R$ 100,00.</li>
@@ -476,32 +476,60 @@ function readWorkbook(file){
   });
 }
 
-function parseAmilSheet(rowsRaw, medHeader, denHeader, origem){
-  const hIdx = findHeaderRow(rowsRaw, ['Situação','Operadora','Data Implantação']);
-  if(hIdx === -1) return {error:`Não encontrei os cabeçalhos esperados na aba "${origem}".`};
+function excelSerialToDate(n){
+  // serial do Excel -> Date local (base 1899-12-30)
+  const ms = Math.round((n - 25569) * 86400000);
+  const u = new Date(ms);
+  return new Date(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate());
+}
+function normDate(v){
+  if(v==null || v==='') return null;
+  if(typeof v === 'number') return (v > 20000 && v < 80000) ? excelSerialToDate(v) : null;
+  if(v instanceof Date) return v;
+  const m = String(v).trim().match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if(m) return new Date(+m[3], +m[2]-1, +m[1]);
+  const d = new Date(v);
+  return isNaN(d) ? null : d;
+}
+
+// Lê qualquer aba de relatório Amil (modelos antigos PF/PME/Base e novos "Planilha1").
+// Detecta o cabeçalho e as colunas de vidas/data pelo nome.
+function parseAmilSheet(rowsRaw, origemAba){
+  const hIdx = findHeaderRow(rowsRaw, ['Situação','Número da Proposta']);
+  if(hIdx === -1) return {skip:true};
   const cols = colIndexMap(rowsRaw[hIdx]);
-  const need = ['Situação','Data Implantação',medHeader,denHeader,'Número da Proposta','Nome Corretor'];
-  const missing = need.filter(n => col(cols,n) === undefined);
-  if(missing.length) return {error:`Colunas ausentes na aba "${origem}": ${missing.join(', ')}`};
+  const pick = (names) => { for(const n of names){ const c = col(cols,n); if(c!==undefined) return c; } return undefined; };
+  const cMed = pick(['Qtde Total Benef. Médico','Beneficiários Médica']);
+  const cDen = pick(['Qtde Total Benef. Dental','Beneficiários Dental']);
+  const cData = pick(['Data Implantação']);
+  const cVig = pick(['Vigência da Proposta']);
+  const dataCol = cData !== undefined ? cData : cVig;
+  const dataNome = cData !== undefined ? 'Data Implantação' : 'Vigência da Proposta';
+  const cProp = col(cols,'Número da Proposta');
+  const cSit = col(cols,'Situação');
+  const cCor = col(cols,'Nome Corretor');
+  const missing = [];
+  if(cMed===undefined && cDen===undefined) missing.push('Qtde de beneficiários (médico/dental)');
+  if(dataCol===undefined) missing.push('Data Implantação / Vigência da Proposta');
+  if(missing.length) return {error:`Colunas ausentes na aba "${origemAba}": ${missing.join(', ')}`};
+  const origem = (cMed!==undefined && col(cols,'Qtde Total Benef. Médico')!==undefined) ? 'PME'
+               : (col(cols,'Beneficiários Médica')!==undefined ? 'PF' : origemAba);
   const parsed = [];
   for(let r=hIdx+1; r<rowsRaw.length; r++){
     const row = rowsRaw[r];
     if(!row || row.every(c=>c==null||c==='')) continue;
-    const situacao = row[col(cols,'Situação')];
-    if(String(situacao||'').trim().toLowerCase() !== 'implantada') continue;
-    const propostaVal = row[col(cols,'Número da Proposta')];
-    const dataImp = row[col(cols,'Data Implantação')];
-    const med = Number(row[col(cols,medHeader)])||0;
-    const den = Number(row[col(cols,denHeader)])||0;
+    if(String(row[cSit]||'').trim().toLowerCase() !== 'implantada') continue;
+    const med = cMed!==undefined ? (Number(row[cMed])||0) : 0;
+    const den = cDen!==undefined ? (Number(row[cDen])||0) : 0;
     parsed.push({
-      proposta: propostaVal,
-      corretor: row[col(cols,'Nome Corretor')],
-      data: dataImp,
+      proposta: row[cProp],
+      corretor: cCor!==undefined ? row[cCor] : '',
+      data: normDate(row[dataCol]),
       vidas: Math.max(med, den),
       origem
     });
   }
-  return {rows: parsed};
+  return {rows: parsed, dataNome};
 }
 
 // ---------- Chips (multi-arquivo) ----------
@@ -527,35 +555,21 @@ async function handleAmilFiles(fileList){
   for(const file of Array.from(fileList)){
     try{
       const wb = await readWorkbook(file);
-      const findSheet = (target) => wb.SheetNames.find(n => normHeader(n) === normHeader(target));
-      const pfName = findSheet('PF');
-      const pmeName = findSheet('PME');
-      const baseName = findSheet('Base');
       let fileRows = [];
       const errors = [];
-
-      if(pfName || pmeName){
-        if(pfName){
-          const rowsRaw = XLSX.utils.sheet_to_json(wb.Sheets[pfName], {header:1, defval:null});
-          const res = parseAmilSheet(rowsRaw, 'Beneficiários Médica', 'Beneficiários Dental', 'PF');
-          if(res.error) errors.push(res.error); else fileRows = fileRows.concat(res.rows);
-        }
-        if(pmeName){
-          const rowsRaw = XLSX.utils.sheet_to_json(wb.Sheets[pmeName], {header:1, defval:null});
-          const res = parseAmilSheet(rowsRaw, 'Qtde Total Benef. Médico', 'Qtde Total Benef. Dental', 'PME');
-          if(res.error) errors.push(res.error); else fileRows = fileRows.concat(res.rows);
-        }
-      } else if(baseName){
-        const rowsRaw = XLSX.utils.sheet_to_json(wb.Sheets[baseName], {header:1, defval:null});
-        const res = parseAmilSheet(rowsRaw, 'Qtde Total Benef. Médico', 'Qtde Total Benef. Dental', 'Base');
-        if(res.error) errors.push(res.error); else fileRows = fileRows.concat(res.rows);
-      } else {
-        errors.push('Não encontrei abas "PF"/"PME" nem "Base".');
+      const usadas = new Set();
+      for(const sheetName of wb.SheetNames){
+        const rowsRaw = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {header:1, defval:null});
+        const res = parseAmilSheet(rowsRaw, sheetName);
+        if(res.skip) continue;
+        if(res.error){ errors.push(res.error); continue; }
+        fileRows = fileRows.concat(res.rows);
+        usadas.add(res.dataNome);
       }
-
+      if(!fileRows.length && !errors.length) errors.push('Não encontrei uma aba com as colunas "Situação" e "Número da Proposta".');
       if(!fileRows.length && errors.length){ alert(`Arquivo "${file.name}": ` + errors.join(' | ')); continue; }
       if(errors.length) console.warn(`Arquivo "${file.name}": ` + errors.join(' | '));
-      state.amilFiles.push({name: file.name, rows: fileRows});
+      state.amilFiles.push({name: file.name, rows: fileRows, dataCol: Array.from(usadas).join(', ')});
     } catch(err){
       alert(`Erro ao ler o arquivo "${file.name}": ${err.message}`);
     }
