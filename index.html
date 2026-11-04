@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Apuração de Campanha | Affinity</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+<style>
+  :root{
+    --p:#743764;              /* roxo institucional */
+    --g:#FFD040;              /* amarelo institucional */
+    --ink:#2B2330;
+    --muted:#6F6475;
+    --line:rgba(116,55,100,.16);
+    --tint:rgba(116,55,100,.08);
+    --tint2:rgba(116,55,100,.035);
+    --bg:#F6F2F5;
+    --side:240px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:'Basic Sans','BasicSans',Arial,Helvetica,sans-serif; font-size:14px; line-height:1.45;
+  }
+
+  /* ---------- Barra lateral ---------- */
+  .sidebar{
+    position:fixed; top:0; bottom:0; left:0; width:var(--side); background:var(--p); color:#fff;
+    display:flex; flex-direction:column; padding:24px 16px 20px; z-index:30;
+  }
+  .side-title{padding:0 8px 18px; border-bottom:1px solid rgba(255,255,255,.22); margin-bottom:16px;}
+  .side-title .t1{font-size:17px; font-weight:700; line-height:1.2;}
+  .side-title .t2{font-size:12px; color:var(--g); font-weight:700; letter-spacing:.06em; text-transform:uppercase; margin-top:6px;}
+  .nav{display:flex; flex-direction:column; gap:4px;}
+  .nav a{
+    display:flex; align-items:center; gap:12px; padding:10px 10px; border-radius:8px; color:rgba(255,255,255,.88);
+    text-decoration:none; font-weight:700; font-size:14px; border-left:3px solid transparent;
+  }
+  .nav a:hover{background:rgba(255,255,255,.1);}
+  .nav a.active{background:rgba(255,255,255,.14); border-left-color:var(--g); color:#fff;}
+  .nav .n{
+    width:24px; height:24px; border-radius:50%; border:1.5px solid rgba(255,255,255,.6);
+    display:flex; align-items:center; justify-content:center; font-size:12px; flex-shrink:0;
+  }
+  .nav a.done .n{background:var(--g); border-color:var(--g); color:var(--p); font-size:0;}
+  .nav a.done .n::after{content:'\2713'; font-size:13px; font-weight:700;}
+  .side-foot{margin-top:auto; padding:14px 10px 0; border-top:1px solid rgba(255,255,255,.22);}
+  .side-foot .lbl{font-size:11.5px; text-transform:uppercase; letter-spacing:.06em; color:rgba(255,255,255,.75); font-weight:700;}
+  .side-foot .val{font-size:22px; font-weight:700; color:var(--g); margin-top:2px;}
+  .side-foot .nt{font-size:12px; color:rgba(255,255,255,.75); margin-top:4px;}
+
+  /* ---------- Estrutura ---------- */
+  .layout{margin-left:var(--side); min-height:100vh;}
+  .topbar{position:sticky; top:0; z-index:20; background:#fff; border-bottom:1px solid var(--line);}
+  .topbar-in{display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 28px;}
+  .topbar h1{margin:0; font-size:19px; color:var(--p); line-height:1.2;}
+  .topbar .sub{font-size:12.5px; color:var(--muted); margin-top:2px;}
+  .top-right{display:flex; align-items:center; gap:18px;}
+  .badge{
+    border:1.5px solid var(--g); background:rgba(255,208,64,.18); color:var(--p);
+    padding:6px 14px; border-radius:999px; font-size:12.5px; font-weight:700; white-space:nowrap;
+  }
+  .logo{height:34px; width:auto; display:block;}
+  main{max-width:1120px; margin:0 auto; padding:26px 28px 56px;}
+  section{scroll-margin-top:92px;}
+  .card{background:#fff; border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin-bottom:18px;}
+  .card-h{display:flex; align-items:flex-start; justify-content:space-between; gap:14px; margin-bottom:16px; flex-wrap:wrap;}
+  .eyebrow{font-size:11.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--p);}
+  .card-h h2{margin:2px 0 0; font-size:18px; color:var(--ink);}
+  .card-h .hint{font-size:12.5px; color:var(--muted); margin-top:2px;}
+
+  /* ---------- Período ---------- */
+  .row{display:grid; grid-template-columns:repeat(2,minmax(0,210px)); gap:14px; margin-bottom:14px;}
+  .field label{display:block; font-size:12px; color:var(--muted); font-weight:700; margin-bottom:5px;}
+  .field input[type=date], .search input{
+    width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font-size:14px;
+    font-family:inherit; color:var(--ink); background:#fff;
+  }
+  .field input:focus, .search input:focus{outline:2px solid var(--g); border-color:var(--p);}
+  .presets{display:flex; gap:8px; flex-wrap:wrap;}
+  .preset-btn{
+    border:1px solid var(--line); background:#fff; color:var(--p); padding:7px 14px; border-radius:999px;
+    font-family:inherit; font-size:13px; font-weight:700; cursor:pointer;
+  }
+  .preset-btn:hover{border-color:var(--p); background:var(--tint);}
+
+  /* ---------- Upload ---------- */
+  .uploads{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  .dropzone{
+    display:block; border:2px dashed var(--line); border-radius:12px; padding:20px 16px; text-align:center;
+    cursor:pointer; background:#fff; transition:border-color .15s, background .15s;
+  }
+  .dropzone:hover{border-color:var(--p);}
+  .dropzone.drag{border-color:var(--p); background:var(--tint);}
+  .dropzone.filled{border-style:solid; border-color:var(--p); background:var(--tint2);}
+  .dropzone input{display:none;}
+  .dz-icon{color:var(--p); margin-bottom:6px;}
+  .op-name{font-weight:700; color:var(--p); font-size:15px; letter-spacing:.04em;}
+  .op-sheet{font-size:12px; color:var(--muted); margin:2px 0 10px;}
+  .status{font-size:13px; color:var(--muted);}
+  .dropzone.filled .status{color:var(--p); font-weight:700;}
+  .file-chips{display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-top:10px;}
+  .file-chip{
+    display:flex; align-items:center; gap:6px; background:#fff; border:1px solid var(--p); color:var(--p);
+    padding:4px 6px 4px 10px; border-radius:999px; font-size:11.5px; font-weight:700; max-width:230px;
+  }
+  .file-chip .fname{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:170px;}
+  .file-chip .rm{
+    cursor:pointer; background:var(--tint); border:none; color:var(--p); font-weight:700; font-size:13px;
+    line-height:1; width:18px; height:18px; border-radius:50%; padding:0;
+  }
+  .file-chip .rm:hover{background:var(--g);}
+  details.criteria{margin-top:16px; border-top:1px solid var(--line); padding-top:12px;}
+  details.criteria summary{cursor:pointer; font-weight:700; color:var(--p); font-size:13px;}
+  details.criteria ul{margin:10px 0 0; padding-left:18px; color:var(--muted); font-size:12.5px;}
+  details.criteria li{margin-bottom:4px;}
+
+  /* ---------- Resultado ---------- */
+  .actions{display:flex; gap:10px; flex-wrap:wrap;}
+  .btn{
+    display:inline-flex; align-items:center; gap:8px; padding:10px 18px; border-radius:8px; border:1px solid var(--p);
+    font-weight:700; font-size:13.5px; cursor:pointer; font-family:inherit;
+  }
+  .btn-primary{background:var(--p); color:#fff;}
+  .btn-gold{background:var(--g); border-color:var(--g); color:var(--p);}
+  .btn:disabled{opacity:.4; cursor:not-allowed;}
+  .btn:not(:disabled):hover{opacity:.9;}
+  .kpis{display:grid; grid-template-columns:repeat(4,1fr); gap:14px;}
+  .kpi{border:1px solid var(--line); border-top:3px solid var(--g); border-radius:10px; padding:14px 16px; background:#fff;}
+  .kpi .label{font-size:11.5px; text-transform:uppercase; letter-spacing:.06em; font-weight:700; color:var(--muted);}
+  .kpi .value{font-size:28px; font-weight:700; color:var(--p); margin:6px 0 2px; line-height:1.1;}
+  .kpi .sub{font-size:12px; color:var(--muted);}
+  .kpi.total{background:var(--p); border-color:var(--p); border-top-color:var(--g);}
+  .kpi.total .label, .kpi.total .sub{color:rgba(255,255,255,.85);}
+  .kpi.total .value{color:var(--g);}
+  .split{margin-top:20px;}
+  .split .ttl{font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-bottom:8px;}
+  .split-bar{display:flex; height:12px; border-radius:999px; overflow:hidden; background:var(--tint);}
+  .split-bar i{display:block; height:100%; transition:width .3s;}
+  #barAmil{background:var(--p);} #barSupermed{background:var(--g);}
+  .split-leg{display:flex; gap:20px; margin-top:8px; font-size:12.5px; color:var(--muted); flex-wrap:wrap;}
+  .split-leg .dot{display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:-1px;}
+
+  /* ---------- Detalhamento ---------- */
+  .toolbar{display:flex; justify-content:space-between; align-items:flex-end; gap:14px; flex-wrap:wrap; margin-bottom:12px;}
+  .tabs{display:flex; gap:4px;}
+  .tab{
+    background:none; border:0; padding:10px 16px; font-weight:700; color:var(--muted); cursor:pointer;
+    border-bottom:3px solid transparent; font-family:inherit; font-size:14px;
+  }
+  .tab.active{color:var(--p); border-bottom-color:var(--g);}
+  .search{width:260px; max-width:100%;}
+  .table-wrap{border:1px solid var(--line); border-radius:10px; overflow:auto; max-height:430px;}
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  thead th{
+    position:sticky; top:0; background:var(--p); color:#fff; text-align:left; padding:10px 12px;
+    font-weight:700; white-space:nowrap;
+  }
+  tbody td{padding:9px 12px; border-bottom:1px solid var(--line);}
+  tbody tr:nth-child(even){background:var(--tint2);}
+  tbody tr:hover{background:var(--tint);}
+  .num{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap;}
+  .pill{display:inline-block; padding:2px 9px; border-radius:999px; background:var(--tint); color:var(--p); font-size:11.5px; font-weight:700;}
+  .empty{padding:28px 16px; text-align:center; color:var(--muted);}
+  .tfoot-bar{margin-top:10px; padding:10px 14px; border-left:3px solid var(--g); background:var(--tint2); font-size:13px; color:var(--ink); min-height:40px;}
+  .tfoot-bar:empty{display:none;}
+
+  #printTables{display:none;}
+
+  /* ---------- Responsivo ---------- */
+  @media(max-width:960px){
+    .sidebar{display:none;}
+    .layout{margin-left:0;}
+  }
+  @media(max-width:820px){
+    .kpis{grid-template-columns:repeat(2,1fr);}
+    .uploads{grid-template-columns:1fr;}
+  }
+  @media(max-width:560px){
+    main{padding:18px 14px 40px;}
+    .topbar-in{padding:10px 14px;}
+    .badge{display:none;}
+    .topbar h1{font-size:16px;}
+    .logo{height:28px;}
+    .row{grid-template-columns:1fr 1fr;}
+  }
+
+  /* ---------- Impressão / PDF ---------- */
+  @media print{
+    @page{size:A4 landscape; margin:12mm;}
+    *{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
+    body{background:#fff; font-size:12px;}
+    .sidebar, .no-print, #sec-periodo, #sec-relatorios, #sec-detalhe{display:none !important;}
+    .layout{margin-left:0;}
+    .topbar{position:static; border-bottom:2px solid var(--p);}
+    .topbar-in{padding:0 0 8px;}
+    .badge{display:inline-block !important;}
+    main{padding:12px 0 0; max-width:none;}
+    .card{border:1px solid var(--line); break-inside:avoid;}
+    .eyebrow{display:none;}
+    .kpis{grid-template-columns:repeat(4,1fr) !important;}
+    #printTables{display:block; break-before:page;}
+    .print-meta{color:var(--muted); font-size:11.5px; margin:0 0 10px;}
+    .print-sec{margin-top:6px;}
+    .print-sec + .print-sec{break-before:page;}
+    .print-sec h3{margin:0 0 6px; color:var(--p); font-size:15px; border-bottom:2px solid var(--g); padding-bottom:4px;}
+    .print-sec table{font-size:10.5px;}
+    .print-sec thead th{padding:6px 10px;}
+    .print-sec tbody td{padding:3px 10px;}
+    .print-sec .pill{padding:0 7px; font-size:10px;}
+    .print-sec thead{display:table-header-group;}
+    .print-sec tr{break-inside:avoid;}
+    thead th{position:static;}
+  }
+</style>
+</head>
+<body>
+
+<aside class="sidebar" aria-label="Navegação">
+  <div class="side-title">
+    <div class="t1">Apuração de Campanha</div>
+    <div class="t2">Vidas implantadas</div>
+  </div>
+  <nav class="nav">
+    <a href="#sec-periodo" id="navPeriodo" data-sec="sec-periodo"><span class="n">1</span>Período</a>
+    <a href="#sec-relatorios" id="navRelatorios" data-sec="sec-relatorios"><span class="n">2</span>Relatórios</a>
+    <a href="#sec-resultado" id="navResultado" data-sec="sec-resultado"><span class="n">3</span>Resultado</a>
+    <a href="#sec-detalhe" id="navDetalhe" data-sec="sec-detalhe"><span class="n">4</span>Detalhamento</a>
+  </nav>
+  <div class="side-foot">
+    <div class="lbl">Valor por vida</div>
+    <div class="val">R$ 100,00</div>
+    <div class="nt">Apuração trimestral · Amil e Supermed</div>
+  </div>
+</aside>
+
+<div class="layout">
+  <header class="topbar">
+    <div class="topbar-in">
+      <div>
+        <h1>Apuração de Campanha</h1>
+        <div class="sub">Vidas implantadas × R$ 100,00 · Amil e Supermed</div>
+      </div>
+      <div class="top-right">
+        <span class="badge" id="periodoBadge">Período não definido</span>
+        <img class="logo" alt="Affinity" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjk4IiBoZWlnaHQ9Ijc3IiB2aWV3Qm94PSIwIDAgMjk4IDc3IiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8cGF0aCBkPSJNNTIuMzYyMyA0Ni4zMDFDNTIuODczNCA0OC4zNTQxIDUzLjYyMDQgNDkuOTgzNiA1NC41OTg5IDUxLjE5OEM1NS41Nzc0IDUyLjQxMjQgNTYuODM1NiA1My4xMTE0IDU4LjM3NzYgNTMuMjk0OUw1OC4wOTggNTUuMDQyMkM1Ny43MjI0IDU1LjEzNCA1Ny4xODk0IDU1LjIxNyA1Ni40OTA1IDU1LjI4NjlDNTUuNzkxNSA1NS4zNTY4IDU1LjE4NDMgNTUuMzkxNyA1NC42NzMyIDU1LjM5MTdDNTMuNTU0OCA1NS4zOTE3IDUyLjM3NTQgNTUuMjg2OSA1MS4xMzkxIDU1LjA3NzJDNDkuOTAyOCA1NC44Njc1IDQ4LjcyNzcgNTQuNDQ4MSA0Ny42MDUgNTMuODE5MUM0Ni40ODY3IDUzLjE5IDQ1LjQ3MzIgNTIuMjgxNCA0NC41NjAyIDUxLjA5MzJDNDMuNjUxNiA0OS45MDQ5IDQyLjk2MTMgNDguMzA2MSA0Mi40OTgzIDQ2LjMwMUw0MS41ODUzIDQyLjM4MjVIMjIuODgzOUwxNC44Njc4IDU1LjExMjFIMTEuMzY4N0w0MC4xMTc1IDguOTQ2MjlINDMuMjY3MUw1Mi4zNjIzIDQ2LjMwMVpNMjQuOTE5NiAzOS4yMzcySDQwLjgwNzdMMzYuMzA4MiAyMC45ODE0TDI0LjkxOTYgMzkuMjM3MloiIGZpbGw9IiM3NDM3NjQiLz4KPHBhdGggZD0iTTcxLjc0MDggMjUuMzg1SDY3LjU0MjdMNjguMTAxOSAyMi4yMzUzSDcyLjNMNzIuNjQ5NSAyMC4zNDgyQzczLjM0ODQgMTYuMzg2IDc1LjAxNzIgMTMuMzc2MSA3Ny42NTE0IDExLjMyMjlDODAuMjg1NSA5LjI2OTc1IDgzLjg4OTUgOC4yNDMxNiA4OC40NTg5IDguMjQzMTZDODkuNjY5IDguMjQzMTYgOTAuODYxNiA4LjM0ODAxIDkyLjAyNzkgOC41NTc2OUM5My4xOTQzIDguNzY3MzggOTQuMDU0OSA5LjA2MDA3IDk0LjYxNDEgOS40MzEzOEM5NS42ODQ0IDEwLjEzMDMgOTYuNDA5NSAxMS4xMzUxIDk2Ljc4MDggMTIuNDQxM0w5My41NjEzIDE0Ljg4NzZDOTMuMDQ1OCAxMy44MTczIDkyLjMzODEgMTIuOTY1NSA5MS40Mjk1IDEyLjMzNjRDOTAuNTIwOCAxMS43MDc0IDg5LjQ1OTMgMTEuMzkyOCA4OC4yNDQ5IDExLjM5MjhDODYuNjU5MSAxMS4zOTI4IDg1LjMzMTEgMTIuMDM1IDg0LjI1NjUgMTMuMzE0OUM4My4xODE4IDE0LjU5OTMgODIuMzQzMSAxNi45NDA4IDgxLjc0MDIgMjAuMzQzOEw4MS4zOTA4IDIyLjIzMUg5MC40ODU5TDg5LjkyNjcgMjUuMzgwNkg4MC44MzE2TDc1LjkzNDYgNTMuMzYwNkM3NS40MTkxIDU2LjI1MjUgNzQuNzQ2MyA1OC42NjM5IDczLjkwNzYgNjAuNTk5MUM3My4wNjg4IDYyLjUzNDMgNzEuOTUwNSA2NC4wNzIgNzAuNTQ4MiA2NS4yMTY2QzY5LjE1MDMgNjYuMzU2OCA2Ny40MzM1IDY3LjE3MzYgNjUuNDA2NiA2Ny42NjI5QzYzLjM3OTYgNjguMTUyMiA2MC45NDIgNjguMzk2OCA1OC4wOTgxIDY4LjM5NjhMNTguMzc3NyA2Ni42NDk0QzU5LjQ1MjQgNjYuNDYxNiA2MC40MTc4IDY2LjExMjEgNjEuMjgyOCA2NS42MDFDNjIuMTQ3NyA2NS4wODk5IDYyLjkxNjYgNjQuMzE2NyA2My41ODkzIDYzLjI5NDVDNjQuMjY2NCA2Mi4yNjc5IDY0Ljg3MzYgNjAuOTUzIDY1LjQwNjYgNTkuMzQxQzY1Ljk0MzkgNTcuNzMzNCA2Ni40MjAxIDU1LjczNyA2Ni44Mzk0IDUzLjM2MDZMNzEuNzM2NSAyNS4zODA2TDcxLjc0MDggMjUuMzg1WiIgZmlsbD0iIzc0Mzc2NCIvPgo8cGF0aCBkPSJNMTAxLjQ2OCAyNS4zODVIOTcuMjY5OEw5Ny44MjkgMjIuMjM1M0gxMDIuMDI3TDEwMi4zNzcgMjAuMzQ4MkMxMDMuMDc1IDE2LjM4NiAxMDQuNzQ0IDEzLjM3NjEgMTA3LjM3OCAxMS4zMjI5QzExMC4wMTMgOS4yNjk3NSAxMTMuNjE3IDguMjQzMTYgMTE4LjE4NiA4LjI0MzE2QzExOS4zOTYgOC4yNDMxNiAxMjAuNTg5IDguMzQ4MDEgMTIxLjc1NSA4LjU1NzY5QzEyMi45MjEgOC43NjczOCAxMjMuNzgyIDkuMDYwMDcgMTI0LjM0MSA5LjQzMTM4QzEyNS40MTEgMTAuMTMwMyAxMjYuMTM3IDExLjEzNTEgMTI2LjUwOCAxMi40NDEzTDEyMy4yODggMTQuODg3NkMxMjIuNzczIDEzLjgxNzMgMTIyLjA2NSAxMi45NjU1IDEyMS4xNTcgMTIuMzM2NEMxMjAuMjQ4IDExLjcwNzQgMTE5LjE4NiAxMS4zOTI4IDExNy45NzIgMTEuMzkyOEMxMTYuMzg2IDExLjM5MjggMTE1LjA1OCAxMi4wMzUgMTEzLjk4NCAxMy4zMTQ5QzExMi45MDkgMTQuNTk5MyAxMTIuMDcgMTYuOTQwOCAxMTEuNDY3IDIwLjM0MzhMMTExLjExOCAyMi4yMzFIMTIwLjIxM0wxMTkuNjU0IDI1LjM4MDZIMTEwLjU1OUwxMDUuNjYyIDUzLjM2MDZDMTA1LjE0NiA1Ni4yNTI1IDEwNC40NzMgNTguNjYzOSAxMDMuNjM1IDYwLjU5OTFDMTAyLjc5NiA2Mi41MzQzIDEwMS42NzggNjQuMDcyIDEwMC4yNzUgNjUuMjE2NkM5OC44Nzc0IDY2LjM1NjggOTcuMTYwNiA2Ny4xNzM2IDk1LjEzMzYgNjcuNjYyOUM5My4xMDY3IDY4LjE1MjIgOTAuNjY5MSA2OC4zOTY4IDg3LjgyNTIgNjguMzk2OEw4OC4xMDQ4IDY2LjY0OTRDODkuMTc5NCA2Ni40NjE2IDkwLjE0NDggNjYuMTEyMSA5MS4wMDk4IDY1LjYwMUM5MS44NzQ4IDY1LjA4OTkgOTIuNjQzNiA2NC4zMTY3IDkzLjMxNjMgNjMuMjk0NUM5My45OTM0IDYyLjI2NzkgOTQuNjAwNyA2MC45NTMgOTUuMTMzNiA1OS4zNDFDOTUuNjcwOSA1Ny43MzM0IDk2LjE0NzEgNTUuNzM3IDk2LjU2NjUgNTMuMzYwNkwxMDEuNDY0IDI1LjM4MDZMMTAxLjQ2OCAyNS4zODVaIiBmaWxsPSIjNzQzNzY0Ii8+CjxwYXRoIGQ9Ik0xMzAuNzA2IDMxLjMzMUMxMzAuOTM4IDMwLjAyNDggMTMxLjA1NiAyOC45NzY0IDEzMS4wNTYgMjguMTgxM0MxMzEuMDU2IDI2Ljk3MTIgMTMwLjc2MyAyNi4wMjMzIDEzMC4xODIgMjUuMzQ2MkMxMjkuNTk2IDI0LjY2OTEgMTI4LjU2MSAyNC4zMzI3IDEyNy4wNjcgMjQuMzMyN0gxMjYuMzY4TDEyNi43MTggMjIuMjM1OEgxMzUuMTE0QzEzNi45MzEgMjIuMjM1OCAxMzguMjUgMjIuNTc2NiAxMzkuMDY3IDIzLjI0OTNDMTM5Ljg4NCAyMy45MjY0IDE0MC4yOSAyNS4xNDk2IDE0MC4yOSAyNi45MjMyQzE0MC4yOSAyNy41MzA0IDE0MC4yNDIgMjguMTk0NCAxNDAuMTUxIDI4LjkxNTJDMTQwLjA1NSAyOS42NDA0IDEzOS45NDEgMzAuNDQ0MiAxMzkuODAxIDMxLjMyNjZMMTM1LjY3MyA1NS4xMDg1SDEyNi41NzhMMTMwLjcwNiAzMS4zMjY2VjMxLjMzMVpNMTQyLjE3OCAxMy40MjQ3QzE0Mi4xNzggMTQuNzc4OSAxNDEuODE1IDE1Ljk1NCAxNDEuMDk0IDE2Ljk1ODdDMTQwLjM2OSAxNy45NjM1IDEzOS4xOTQgMTguNDYxNSAxMzcuNTYgMTguNDYxNUMxMzYuMDY2IDE4LjQ2MTUgMTM0Ljk2MSAxOC4wNTUyIDEzNC4yMzYgMTcuMjM4M0MxMzMuNTExIDE2LjQyMTQgMTMzLjE1MiAxNS40Mjk4IDEzMy4xNTIgMTQuMjYzNEMxMzMuMTUyIDEzLjAwNTMgMTMzLjU1OSAxMS44NTIgMTM0LjM3NiAxMC43OTkyQzEzNS4xOTIgOS43NTA3OCAxMzYuMzI0IDkuMjI2NTYgMTM3Ljc3IDkuMjI2NTZDMTM5LjIxNiA5LjIyNjU2IDE0MC4zNjkgOS42MzcyIDE0MS4wOTQgMTAuNDQ5N0MxNDEuODE1IDExLjI2NjYgMTQyLjE3OCAxMi4yNTgzIDE0Mi4xNzggMTMuNDI0N1oiIGZpbGw9IiM3NDM3NjQiLz4KPHBhdGggZD0iTTE3MS4zNDYgMjQuODk1NUMxNjkuODUyIDI0Ljg5NTUgMTY4LjUyNCAyNS4xMDUyIDE2Ny4zNTcgMjUuNTI5QzE2Ni4xOTEgMjUuOTUyNyAxNjUuMjYxIDI2LjQ2MzggMTY0LjU1NyAyNy4wNzU0QzE2NC42OTcgMjguNDM0IDE2NC42NDkgMjkuNjc0NiAxNjQuNDE3IDMwLjgwMTdMMTYwLjE0OSA1NS4xMTY1SDE1MS4wNTRMMTU1LjE4MyAzMS4zMzQ2QzE1NS40MTQgMzAuMDI4NSAxNTUuNTMyIDI4LjkzMiAxNTUuNTMyIDI4LjA0NTJDMTU1LjUzMiAyNi44Nzg4IDE1NS4yNTIgMjUuOTcwMiAxNTQuNjkzIDI1LjMxOTNDMTU0LjEzNCAyNC42Njg0IDE1My4xMDggMjQuMzQwNyAxNTEuNjEzIDI0LjM0MDdIMTUwLjkxNUwxNTEuMjY0IDIyLjI0MzlIMTU4LjE4OEMxNTkuNzc0IDIyLjI0MzkgMTYwLjk4OCAyMi40NDQ4IDE2MS44MjcgMjIuODM4QzE2Mi42NjYgMjMuMjM1NSAxNjMuMjczIDIzLjg5OTUgMTYzLjY0NCAyNC44M0MxNjQuNTc1IDI0LjAzOTMgMTY1Ljg5NCAyMy4yOTIzIDE2Ny41OTggMjIuNTkzM0MxNjkuMzAxIDIxLjg5NDQgMTcxLjU3MyAyMS41NDQ5IDE3NC40MTcgMjEuNTQ0OUMxNzguMTk2IDIxLjU0NDkgMTgxLjAzOSAyMi4yNzg4IDE4Mi45NTMgMjMuNzQ2NkMxODQuODY2IDI1LjIxNDQgMTg1LjgyMyAyNy41NjAzIDE4NS44MjMgMzAuNzc1NUMxODUuODIzIDMxLjMzNDYgMTg1Ljc4OCAzMS45MiAxODUuNzE4IDMyLjUyMjlDMTg1LjY0OCAzMy4xMzAxIDE4NS41NjUgMzMuNzU5MSAxODUuNDczIDM0LjQxTDE4MS44MzQgNTUuMTE2NUgxNzIuNzM5TDE3Ni4zNzggMzQuMjQ0QzE3Ni41NjYgMzMuMTY1IDE3Ni42NTggMzIuMDkwNCAxNzYuNjU4IDMxLjAxMTRDMTc2LjY1OCAyOC43NjE2IDE3Ni4xNjkgMjcuMTgwMiAxNzUuMTkgMjYuMjY3MkMxNzQuMjEyIDI1LjM1NDIgMTcyLjkyNyAyNC44OTU1IDE3MS4zNDEgMjQuODk1NUgxNzEuMzQ2WiIgZmlsbD0iIzc0Mzc2NCIvPgo8cGF0aCBkPSJNMjAxLjIxNyAzMS4zMzFDMjAxLjQ0OSAzMC4wMjQ4IDIwMS41NjcgMjguOTc2NCAyMDEuNTY3IDI4LjE4MTNDMjAxLjU2NyAyNi45NzEyIDIwMS4yNzQgMjYuMDIzMyAyMDAuNjkzIDI1LjM0NjJDMjAwLjEwOCAyNC42NjkxIDE5OS4wNzIgMjQuMzMyNyAxOTcuNTc4IDI0LjMzMjdIMTk2Ljg3OUwxOTcuMjI5IDIyLjIzNThIMjA1LjYyNUMyMDcuNDQyIDIyLjIzNTggMjA4Ljc2MiAyMi41NzY2IDIwOS41NzkgMjMuMjQ5M0MyMTAuMzk1IDIzLjkyNjQgMjEwLjgwMiAyNS4xNDk2IDIxMC44MDIgMjYuOTIzMkMyMTAuODAyIDI3LjUzMDQgMjEwLjc1NCAyOC4xOTQ0IDIxMC42NjIgMjguOTE1MkMyMTAuNTY2IDI5LjY0MDQgMjEwLjQ1MiAzMC40NDQyIDIxMC4zMTIgMzEuMzI2NkwyMDYuMTg0IDU1LjEwODVIMTk3LjA4OUwyMDEuMjE3IDMxLjMyNjZWMzEuMzMxWk0yMTIuNjg5IDEzLjQyNDdDMjEyLjY4OSAxNC43Nzg5IDIxMi4zMjYgMTUuOTU0IDIxMS42MDUgMTYuOTU4N0MyMTAuODggMTcuOTYzNSAyMDkuNzA1IDE4LjQ2MTUgMjA4LjA3MSAxOC40NjE1QzIwNi41NzcgMTguNDYxNSAyMDUuNDcyIDE4LjA1NTIgMjA0Ljc0NyAxNy4yMzgzQzIwNC4wMjIgMTYuNDIxNCAyMDMuNjY0IDE1LjQyOTggMjAzLjY2NCAxNC4yNjM0QzIwMy42NjQgMTMuMDA1MyAyMDQuMDcgMTEuODUyIDIwNC44ODcgMTAuNzk5MkMyMDUuNzA0IDkuNzUwNzggMjA2LjgzNSA5LjIyNjU2IDIwOC4yODEgOS4yMjY1NkMyMDkuNzI3IDkuMjI2NTYgMjEwLjg4IDkuNjM3MiAyMTEuNjA1IDEwLjQ0OTdDMjEyLjMyNiAxMS4yNjY2IDIxMi42ODkgMTIuMjU4MyAyMTIuNjg5IDEzLjQyNDdaIiBmaWxsPSIjNzQzNzY0Ii8+CjxwYXRoIGQ9Ik0yMzYuNTQxIDIyLjI0MDFIMjQ0LjIzNEwyNDMuNjc1IDI1LjM4OThIMjM1Ljk4MkMyMzUuMzI2IDI5LjAyODcgMjM0Ljc4IDMyLjEzMDMgMjM0LjMzOSAzNC42OTQ2QzIzMy44OTQgMzcuMjU4OSAyMzMuNTIyIDM5LjM5NSAyMzMuMjIxIDQxLjA5NDRDMjMyLjkxNSA0Mi43OTgxIDIzMi42ODMgNDQuMTQ3OSAyMzIuNTIyIDQ1LjE1MjdDMjMyLjM1NiA0Ni4xNTc0IDIzMi4yNDIgNDYuOTI2MyAyMzIuMTcyIDQ3LjQ1OTJDMjMyLjEwMiA0Ny45OTY1IDIzMi4wNTQgNDguMzY3OCAyMzIuMDMzIDQ4LjU3NzVDMjMyLjAwNiA0OC43ODcyIDIzMS45OTggNDguOTYyIDIzMS45OTggNDkuMTAxN0MyMzEuOTk4IDUwLjQ1NiAyMzIuMjU1IDUxLjM4NjQgMjMyLjc2NiA1MS45MDE5QzIzMy4yNzggNTIuNDE3NCAyMzMuOTc3IDUyLjY3MDggMjM0Ljg2MyA1Mi42NzA4QzIzNS42MSA1Mi42NzA4IDIzNi4zNDQgNTIuNTc5IDIzNy4wNjUgNTIuMzkxMkMyMzcuNzg2IDUyLjIwMzQgMjM4LjQwNiA1MS45OTM3IDIzOC45MTcgNTEuNzYyMUMyMzkuNTI0IDUxLjQ4MjYgMjQwLjEwNSA1MS4xNTQ5IDI0MC42NjUgNTAuNzgzNkwyNDEuMjk0IDUyLjc0MDdDMjQwLjU5NSA1My4yOTk4IDIzOS43NzggNTMuODE1MyAyMzguODQ3IDU0LjI3ODRDMjM4LjA1MiA1NC42NTQxIDIzNy4wNjUgNTUuMDAzNSAyMzUuODcyIDU1LjMyNjhDMjM0LjY4NCA1NS42NTAxIDIzMy4yOTUgNTUuODE2MSAyMzEuNzA5IDU1LjgxNjFDMjI4Ljk1NyA1NS44MTYxIDIyNi44MzQgNTUuMTczOSAyMjUuMzQ0IDUzLjg5MzlDMjIzLjg1IDUyLjYwOTYgMjIzLjEwOCA1MC43MDkzIDIyMy4xMDggNDguMTkzMUMyMjMuMTA4IDQ4LjA1MzMgMjIzLjExNyA0Ny44OTE3IDIyMy4xNDMgNDcuNzAzOEMyMjMuMTY1IDQ3LjUxNiAyMjMuMjEzIDQ3LjE2NjUgMjIzLjI4MyA0Ni42NTU0QzIyMy4zNTIgNDYuMTQ0MyAyMjMuNDU3IDQ1LjQxMDQgMjIzLjU5NyA0NC40NTM3QzIyMy43MzcgNDMuNDk3IDIyMy45NDcgNDIuMTkwOCAyMjQuMjI2IDQwLjUzNTJDMjI0LjUwNiAzOC44Nzk2IDIyNC44NjggMzYuODI2NCAyMjUuMzEgMzQuMzhDMjI1Ljc1MSAzMS45MzM3IDIyNi4yNzUgMjguOTM2OSAyMjYuODgyIDI1LjM4OThIMjIyLjY4NEwyMjMuMjQzIDIyLjI0MDFIMjI3LjQ0MUwyMjguNTYgMTUuOTQ1MkwyMzIuODI4IDExLjc0NzFIMjM4LjQyNEwyMzYuNTM2IDIyLjI0MDFIMjM2LjU0MVoiIGZpbGw9IiM3NDM3NjQiLz4KPHBhdGggZD0iTTI2NS41NzQgNTkuNjY0MUMyNjQuNDk5IDYxLjU3NzUgMjYzLjQ3NyA2My4xMzcgMjYyLjQ5NCA2NC4zNTE0QzI2MS41MTUgNjUuNTYxNSAyNjAuNTExIDY2LjUxODIgMjU5LjQ4NCA2Ny4yMjE1QzI1OC40NTggNjcuOTIwNSAyNTcuMzk2IDY4LjQwOTcgMjU2LjMgNjguNjg5M0MyNTUuMjAzIDY4Ljk2ODkgMjU0LjA1IDY5LjEwODcgMjUyLjgzNSA2OS4xMDg3SDI1MC4wMzVMMjUwLjQ1NSA2Ni42NjIzQzI1MS42NjUgNjYuNjYyMyAyNTIuNzk2IDY2LjU1NzUgMjUzLjg0OSA2Ni4zNDc4QzI1NC44OTcgNjYuMTM4MSAyNTUuODc2IDY1Ljc3NTYgMjU2Ljc4OSA2NS4yNjQ0QzI1Ny42OTcgNjQuNzQ5IDI1OC41NjIgNjQuMDYzMSAyNTkuMzc1IDYzLjIwMjVDMjYwLjE5MiA2Mi4zMzc2IDI2MC45OTYgNjEuMjMyNCAyNjEuNzg2IDU5Ljg3ODFMMjYzLjg4MyA1Ni4wOTk0TDI1Ni4xOSAyOC41Mzg4QzI1NS42NzUgMjYuNzY1MiAyNTQuOTY3IDI1LjQzNzIgMjU0LjA1OSAyNC41NTA0QzI1My4xNSAyMy42NjM2IDI1Mi4wMTggMjMuMTI2MyAyNTAuNjY0IDIyLjk0MjhMMjUwLjg3NCAyMS41NDQ5SDI1Ny4wMjlDMjU5LjEyNiAyMS41NDQ5IDI2MC44NzggMjIuMDQ3MyAyNjIuMjc2IDIzLjA0NzdDMjYzLjY3MyAyNC4wNTI0IDI2NC42MyAyNS40MTU0IDI2NS4xNDEgMjcuMTQwOUwyNzAuMTA4IDQ0Ljc2NzZMMjgyLjU1OCAyMi4yNDM5SDI4Ni4yNjdMMjY1LjU2MSA1OS42Njg0TDI2NS41NzQgNTkuNjY0MVoiIGZpbGw9IiM3NDM3NjQiLz4KPC9zdmc+Cg==">
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section id="sec-periodo" class="card no-print">
+      <div class="card-h">
+        <div>
+          <div class="eyebrow">Etapa 1</div>
+          <h2>Período de apuração</h2>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="dataInicio">Data inicial</label>
+          <input type="date" id="dataInicio">
+        </div>
+        <div class="field">
+          <label for="dataFim">Data final</label>
+          <input type="date" id="dataFim">
+        </div>
+      </div>
+      <div class="presets">
+        <button type="button" class="preset-btn" data-preset="q1">1º Trimestre</button>
+        <button type="button" class="preset-btn" data-preset="q2">2º Trimestre</button>
+        <button type="button" class="preset-btn" data-preset="q3">3º Trimestre</button>
+        <button type="button" class="preset-btn" data-preset="q4">4º Trimestre</button>
+        <button type="button" class="preset-btn" data-preset="last90">Últimos 90 dias</button>
+      </div>
+    </section>
+
+    <section id="sec-relatorios" class="card no-print">
+      <div class="card-h">
+        <div>
+          <div class="eyebrow">Etapa 2</div>
+          <h2>Relatórios das operadoras</h2>
+          <div class="hint">Clique ou arraste os arquivos. É possível subir mais de um por operadora.</div>
+        </div>
+      </div>
+      <div class="uploads">
+        <label class="dropzone upload-box" id="boxAmil">
+          <svg class="dz-icon" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+          <div class="op-name">AMIL</div>
+          <div class="op-sheet">abas "PF" e "PME" (ou "Base") · Data Implantação</div>
+          <div class="status" id="statusAmil">Clique para subir 1 ou mais relatórios (.xlsx)</div>
+          <div class="file-chips" id="chipsAmil"></div>
+          <input type="file" id="fileAmil" accept=".xlsx,.xls" multiple>
+        </label>
+        <label class="dropzone upload-box" id="boxSupermed">
+          <svg class="dz-icon" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+          <div class="op-name">SUPERMED</div>
+          <div class="op-sheet">aba "Relatório Análise" · Início Vigência</div>
+          <div class="status" id="statusSupermed">Clique para subir 1 ou mais relatórios (.xlsx)</div>
+          <div class="file-chips" id="chipsSupermed"></div>
+          <input type="file" id="fileSupermed" accept=".xlsx,.xls" multiple>
+        </label>
+      </div>
+      <details class="criteria">
+        <summary>Critérios de apuração</summary>
+        <ul>
+          <li><strong>Amil:</strong> considera propostas com Situação = Implantada, filtradas pela Data Implantação. Por proposta, conta o maior valor entre os beneficiários de médico e de dental, porque são as mesmas vidas.</li>
+          <li><strong>Supermed:</strong> considera linhas com Status = Ativo, filtradas pelo Início Vigência, somando a coluna Quantidade Vidas.</li>
+          <li><strong>Duplicidades:</strong> proposta repetida na Amil conta uma vez, inclusive entre arquivos diferentes. Na Supermed, conta uma vez a mesma proposta com o mesmo titular.</li>
+          <li><strong>Valor:</strong> total de vidas multiplicado por R$ 100,00.</li>
+        </ul>
+      </details>
+    </section>
+
+    <section id="sec-resultado" class="card">
+      <div class="card-h">
+        <div>
+          <div class="eyebrow">Etapa 3</div>
+          <h2>Resultado da apuração</h2>
+          <div class="hint" id="periodoResumo">Defina o período de apuração.</div>
+        </div>
+        <div class="actions no-print">
+          <button type="button" class="btn btn-primary" id="btnExcel" disabled>Exportar Excel</button>
+          <button type="button" class="btn btn-gold" id="btnPdf" disabled>Exportar PDF</button>
+        </div>
+      </div>
+      <div class="kpis">
+        <div class="kpi">
+          <div class="label">Vidas Amil</div>
+          <div class="value" id="kpiAmil">—</div>
+          <div class="sub" id="cntAmil">Relatório não carregado</div>
+        </div>
+        <div class="kpi">
+          <div class="label">Vidas Supermed</div>
+          <div class="value" id="kpiSupermed">—</div>
+          <div class="sub" id="cntSupermed">Relatório não carregado</div>
+        </div>
+        <div class="kpi">
+          <div class="label">Total de vidas</div>
+          <div class="value" id="kpiVidas">—</div>
+          <div class="sub">Amil + Supermed</div>
+        </div>
+        <div class="kpi total">
+          <div class="label">Valor total</div>
+          <div class="value" id="kpiValor">—</div>
+          <div class="sub">R$ 100,00 por vida</div>
+        </div>
+      </div>
+      <div class="split">
+        <div class="ttl">Distribuição por operadora</div>
+        <div class="split-bar"><i id="barAmil" style="width:0%"></i><i id="barSupermed" style="width:0%"></i></div>
+        <div class="split-leg">
+          <span><span class="dot" style="background:var(--p)"></span>Amil <strong id="pctAmil">0%</strong></span>
+          <span><span class="dot" style="background:var(--g)"></span>Supermed <strong id="pctSupermed">0%</strong></span>
+        </div>
+      </div>
+    </section>
+
+    <section id="sec-detalhe" class="card">
+      <div class="card-h">
+        <div>
+          <div class="eyebrow">Etapa 4</div>
+          <h2>Detalhamento</h2>
+        </div>
+      </div>
+      <div class="toolbar">
+        <div class="tabs" role="tablist">
+          <button type="button" class="tab active" data-tab="amil" role="tab" aria-selected="true">Amil</button>
+          <button type="button" class="tab" data-tab="supermed" role="tab" aria-selected="false">Supermed</button>
+        </div>
+        <div class="search"><input type="search" id="busca" placeholder="Buscar proposta, corretor ou titular"></div>
+      </div>
+      <div class="table-wrap" id="tabelaWrap"><div class="empty">Suba os relatórios e defina o período para ver o detalhamento.</div></div>
+      <div class="tfoot-bar" id="tabelaFoot"></div>
+    </section>
+
+    <div id="printTables"></div>
+  </main>
+</div>
+
+<script>
+const state = {
+  amilRows: null,   // merged+deduped rows from all Amil files (unfiltered by date)
+  supermedRows: null,
+  amilFiles: [],    // [{name, rows}] rows = raw parsed rows for that file (before cross-file dedup)
+  supermedFiles: [],
+  currentTab: 'amil'
+};
+
+// ---------- Date helpers ----------
+function toDateOnly(d){
+  if(!d) return null;
+  const dt = new Date(d);
+  if(isNaN(dt)) return null;
+  return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+}
+function fmtDate(d){
+  if(!d) return '';
+  const dt = new Date(d);
+  if(isNaN(dt)) return '';
+  return dt.toLocaleDateString('pt-BR');
+}
+function inPeriod(d){
+  const di = document.getElementById('dataInicio').value;
+  const df = document.getElementById('dataFim').value;
+  if(!di || !df) return false;
+  const dOnly = toDateOnly(d);
+  if(!dOnly) return false;
+  const start = toDateOnly(di + 'T00:00:00');
+  const end = toDateOnly(df + 'T00:00:00');
+  return dOnly >= start && dOnly <= end;
+}
+
+// ---------- Presets ----------
+document.querySelectorAll('.preset-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const now = new Date();
+    const y = now.getFullYear();
+    const ranges = {
+      q1:[`${y}-01-01`, `${y}-03-31`],
+      q2:[`${y}-04-01`, `${y}-06-30`],
+      q3:[`${y}-07-01`, `${y}-09-30`],
+      q4:[`${y}-10-01`, `${y}-12-31`],
+    };
+    if(btn.dataset.preset === 'last90'){
+      const end = new Date();
+      const start = new Date(); start.setDate(start.getDate()-90);
+      document.getElementById('dataFim').value = end.toISOString().slice(0,10);
+      document.getElementById('dataInicio').value = start.toISOString().slice(0,10);
+    } else {
+      const r = ranges[btn.dataset.preset];
+      document.getElementById('dataInicio').value = r[0];
+      document.getElementById('dataFim').value = r[1];
+    }
+    recalc();
+  });
+});
+document.getElementById('dataInicio').addEventListener('change', recalc);
+document.getElementById('dataFim').addEventListener('change', recalc);
+
+// ---------- Header lookup helper ----------
+function normHeader(s){
+  return String(s==null?'':s).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+function findHeaderRow(sheetRows, requiredHeaders){
+  const req = requiredHeaders.map(normHeader);
+  for(let r=0; r<Math.min(sheetRows.length, 15); r++){
+    const row = sheetRows[r].map(c => normHeader(c));
+    const hit = req.every(h => row.includes(h));
+    if(hit) return r;
+  }
+  return -1;
+}
+function colIndexMap(headerRow){
+  const map = {};
+  headerRow.forEach((h,i)=>{ if(h!=null && String(h).trim()!=='') map[normHeader(h)] = i; });
+  return map;
+}
+function col(cols, name){
+  return cols[normHeader(name)];
+}
+
+// ---------- File parsing ----------
+function readWorkbook(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, {type:'array', cellDates:true});
+      resolve(wb);
+    };
+    reader.onerror = reject;
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function parseAmilSheet(rowsRaw, medHeader, denHeader, origem){
+  const hIdx = findHeaderRow(rowsRaw, ['Situação','Operadora','Data Implantação']);
+  if(hIdx === -1) return {error:`Não encontrei os cabeçalhos esperados na aba "${origem}".`};
+  const cols = colIndexMap(rowsRaw[hIdx]);
+  const need = ['Situação','Data Implantação',medHeader,denHeader,'Número da Proposta','Nome Corretor'];
+  const missing = need.filter(n => col(cols,n) === undefined);
+  if(missing.length) return {error:`Colunas ausentes na aba "${origem}": ${missing.join(', ')}`};
+  const parsed = [];
+  for(let r=hIdx+1; r<rowsRaw.length; r++){
+    const row = rowsRaw[r];
+    if(!row || row.every(c=>c==null||c==='')) continue;
+    const situacao = row[col(cols,'Situação')];
+    if(String(situacao||'').trim().toLowerCase() !== 'implantada') continue;
+    const propostaVal = row[col(cols,'Número da Proposta')];
+    const dataImp = row[col(cols,'Data Implantação')];
+    const med = Number(row[col(cols,medHeader)])||0;
+    const den = Number(row[col(cols,denHeader)])||0;
+    parsed.push({
+      proposta: propostaVal,
+      corretor: row[col(cols,'Nome Corretor')],
+      data: dataImp,
+      vidas: Math.max(med, den),
+      origem
+    });
+  }
+  return {rows: parsed};
+}
+
+// ---------- Chips (multi-arquivo) ----------
+function renderChips(containerId, files, removeFn){
+  const el = document.getElementById(containerId);
+  if(!files.length){ el.innerHTML=''; return; }
+  el.innerHTML = files.map((f,i)=>`
+    <span class="file-chip">
+      <span class="fname" title="${f.name}">${f.name}</span>
+      <button type="button" class="rm" data-idx="${i}">×</button>
+    </span>
+  `).join('');
+  el.querySelectorAll('.rm').forEach(btn=>{
+    btn.addEventListener('click', (ev)=>{
+      ev.preventDefault(); ev.stopPropagation();
+      removeFn(Number(btn.dataset.idx));
+    });
+  });
+}
+
+// ---------- AMIL: múltiplos arquivos ----------
+async function handleAmilFiles(fileList){
+  for(const file of Array.from(fileList)){
+    try{
+      const wb = await readWorkbook(file);
+      const findSheet = (target) => wb.SheetNames.find(n => normHeader(n) === normHeader(target));
+      const pfName = findSheet('PF');
+      const pmeName = findSheet('PME');
+      const baseName = findSheet('Base');
+      let fileRows = [];
+      const errors = [];
+
+      if(pfName || pmeName){
+        if(pfName){
+          const rowsRaw = XLSX.utils.sheet_to_json(wb.Sheets[pfName], {header:1, defval:null});
+          const res = parseAmilSheet(rowsRaw, 'Beneficiários Médica', 'Beneficiários Dental', 'PF');
+          if(res.error) errors.push(res.error); else fileRows = fileRows.concat(res.rows);
+        }
+        if(pmeName){
+          const rowsRaw = XLSX.utils.sheet_to_json(wb.Sheets[pmeName], {header:1, defval:null});
+          const res = parseAmilSheet(rowsRaw, 'Qtde Total Benef. Médico', 'Qtde Total Benef. Dental', 'PME');
+          if(res.error) errors.push(res.error); else fileRows = fileRows.concat(res.rows);
+        }
+      } else if(baseName){
+        const rowsRaw = XLSX.utils.sheet_to_json(wb.Sheets[baseName], {header:1, defval:null});
+        const res = parseAmilSheet(rowsRaw, 'Qtde Total Benef. Médico', 'Qtde Total Benef. Dental', 'Base');
+        if(res.error) errors.push(res.error); else fileRows = fileRows.concat(res.rows);
+      } else {
+        errors.push('Não encontrei abas "PF"/"PME" nem "Base".');
+      }
+
+      if(!fileRows.length && errors.length){ alert(`Arquivo "${file.name}": ` + errors.join(' | ')); continue; }
+      if(errors.length) console.warn(`Arquivo "${file.name}": ` + errors.join(' | '));
+      state.amilFiles.push({name: file.name, rows: fileRows});
+    } catch(err){
+      alert(`Erro ao ler o arquivo "${file.name}": ${err.message}`);
+    }
+  }
+  recomputeAmil();
+}
+
+function recomputeAmil(){
+  const combined = state.amilFiles.flatMap(f => f.rows);
+  const seen = new Set();
+  const deduped = [];
+  combined.forEach((r,i)=>{
+    const key = r.proposta==null ? `__idx${i}` : String(r.proposta).trim();
+    if(seen.has(key)) return; // proposta já contabilizada (mesma proposta repetida no arquivo ou em outro arquivo)
+    seen.add(key);
+    deduped.push(r);
+  });
+  state.amilRows = state.amilFiles.length ? deduped : null;
+  renderChips('chipsAmil', state.amilFiles, removeAmilFile);
+  const box = document.getElementById('boxAmil');
+  const status = document.getElementById('statusAmil');
+  if(state.amilFiles.length){
+    box.classList.add('filled');
+    status.textContent = `✓ ${state.amilFiles.length} arquivo(s) · ${deduped.length} propostas implantadas (únicas)`;
+  } else {
+    box.classList.remove('filled');
+    status.textContent = 'Clique para subir 1 ou mais relatórios (.xlsx)';
+  }
+  recalc();
+}
+
+function removeAmilFile(idx){
+  state.amilFiles.splice(idx,1);
+  recomputeAmil();
+}
+
+document.getElementById('fileAmil').addEventListener('change', (e)=>{
+  if(!e.target.files.length) return;
+  handleAmilFiles(e.target.files).finally(()=>{ e.target.value=''; });
+});
+
+// ---------- SUPERMED: múltiplos arquivos ----------
+async function handleSupermedFiles(fileList){
+  for(const file of Array.from(fileList)){
+    try{
+      const wb = await readWorkbook(file);
+      const sheetName = wb.SheetNames.find(n => normHeader(n) === normHeader('Relatório Análise')) || wb.SheetNames[wb.SheetNames.length-1];
+      const rowsRaw = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {header:1, defval:null});
+      const hIdx = findHeaderRow(rowsRaw, ['Status','Quantidade Vidas','Início Vigência']);
+      if(hIdx === -1){ alert(`Arquivo "${file.name}": não encontrei os cabeçalhos esperados na aba "Relatório Análise".`); continue; }
+      const cols = colIndexMap(rowsRaw[hIdx]);
+      const need = ['Status','Quantidade Vidas','Inicio Vigência','Numero Proposta','Titular Nome','Vendedor Nome'];
+      const missing = need.filter(n => col(cols,n) === undefined);
+      if(missing.length){ alert(`Arquivo "${file.name}": colunas ausentes: ` + missing.join(', ')); continue; }
+      const rows = [];
+      for(let r=hIdx+1; r<rowsRaw.length; r++){
+        const row = rowsRaw[r];
+        if(!row || row.every(c=>c==null||c==='')) continue;
+        const status = row[col(cols,'Status')];
+        if(String(status||'').trim().toLowerCase() !== 'ativo') continue;
+        rows.push({
+          proposta: row[col(cols,'Numero Proposta')],
+          corretor: row[col(cols,'Vendedor Nome')],
+          titular: row[col(cols,'Titular Nome')],
+          data: row[col(cols,'Inicio Vigência')],
+          vidas: Number(row[col(cols,'Quantidade Vidas')])||0
+        });
+      }
+      state.supermedFiles.push({name: file.name, rows});
+    } catch(err){
+      alert(`Erro ao ler o arquivo "${file.name}": ${err.message}`);
+    }
+  }
+  recomputeSupermed();
+}
+
+function recomputeSupermed(){
+  const combined = state.supermedFiles.flatMap(f => f.rows);
+  const seen = new Set();
+  const deduped = [];
+  combined.forEach(r=>{
+    const key = `${r.proposta==null?'':String(r.proposta).trim()}__${r.titular==null?'':String(r.titular).trim().toLowerCase()}`;
+    if(seen.has(key)) return; // linha duplicada (mesma proposta + titular repetidos no arquivo ou entre arquivos)
+    seen.add(key);
+    deduped.push(r);
+  });
+  state.supermedRows = state.supermedFiles.length ? deduped : null;
+  renderChips('chipsSupermed', state.supermedFiles, removeSupermedFile);
+  const box = document.getElementById('boxSupermed');
+  const status = document.getElementById('statusSupermed');
+  if(state.supermedFiles.length){
+    box.classList.add('filled');
+    status.textContent = `✓ ${state.supermedFiles.length} arquivo(s) · ${deduped.length} linhas ativas (únicas)`;
+  } else {
+    box.classList.remove('filled');
+    status.textContent = 'Clique para subir 1 ou mais relatórios (.xlsx)';
+  }
+  recalc();
+}
+
+function removeSupermedFile(idx){
+  state.supermedFiles.splice(idx,1);
+  recomputeSupermed();
+}
+
+document.getElementById('fileSupermed').addEventListener('change', (e)=>{
+  if(!e.target.files.length) return;
+  handleSupermedFiles(e.target.files).finally(()=>{ e.target.value=''; });
+});
+
+// ---------- Formatação ----------
+function BRL(v){ return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
+function NUM(v){ return v.toLocaleString('pt-BR'); }
+function esc(s){
+  return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function periodoTexto(){
+  const di = document.getElementById('dataInicio').value;
+  const df = document.getElementById('dataFim').value;
+  return (di && df) ? `${fmtDate(di+'T00:00:00')} a ${fmtDate(df+'T00:00:00')}` : '';
+}
+
+// ---------- Arrastar e soltar ----------
+[['boxAmil', handleAmilFiles], ['boxSupermed', handleSupermedFiles]].forEach(([id, fn])=>{
+  const el = document.getElementById(id);
+  ['dragenter','dragover'].forEach(ev => el.addEventListener(ev, e=>{ e.preventDefault(); el.classList.add('drag'); }));
+  ['dragleave','drop'].forEach(ev => el.addEventListener(ev, e=>{ e.preventDefault(); el.classList.remove('drag'); }));
+  el.addEventListener('drop', e=>{
+    if(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) fn(e.dataTransfer.files);
+  });
+});
+
+// ---------- Colunas por operadora ----------
+const COLS = {
+  amil: {
+    nome: 'Amil',
+    head: ['Origem','Proposta','Corretor','Data Implantação','Vidas','Valor'],
+    cells: r => ['<span class="pill">'+esc(r.origem ?? 'Amil')+'</span>', esc(r.proposta), esc(r.corretor), fmtDate(r.data), NUM(r.vidas), BRL(r.vidas*100)]
+  },
+  supermed: {
+    nome: 'Supermed',
+    head: ['Proposta','Titular','Vendedor','Início Vigência','Vidas','Valor'],
+    cells: r => [esc(r.proposta), esc(r.titular), esc(r.corretor), fmtDate(r.data), NUM(r.vidas), BRL(r.vidas*100)]
+  }
+};
+
+function tableHTML(tab, rows){
+  const c = COLS[tab];
+  const n = c.head.length;
+  const head = c.head.map((h,i)=>`<th class="${i>=n-2?'num':''}">${h}</th>`).join('');
+  const body = rows.map(r => '<tr>' + c.cells(r).map((x,i)=>`<td class="${i>=n-2?'num':''}">${x}</td>`).join('') + '</tr>').join('');
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function totalLinha(rows){
+  const v = rows.reduce((s,r)=>s+r.vidas,0);
+  return `<strong>${NUM(rows.length)}</strong> registros &nbsp;·&nbsp; <strong>${NUM(v)}</strong> vidas &nbsp;·&nbsp; <strong>${BRL(v*100)}</strong>`;
+}
+
+// ---------- Abas e busca ----------
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(x=>{ x.classList.remove('active'); x.setAttribute('aria-selected','false'); });
+    t.classList.add('active');
+    t.setAttribute('aria-selected','true');
+    state.currentTab = t.dataset.tab;
+    renderTable();
+  });
+});
+document.getElementById('busca').addEventListener('input', ()=>renderTable());
+
+// ---------- Cálculo ----------
+function getFilteredAmil(){
+  if(!state.amilRows) return [];
+  return state.amilRows.filter(r => inPeriod(r.data));
+}
+function getFilteredSupermed(){
+  if(!state.supermedRows) return [];
+  return state.supermedRows.filter(r => inPeriod(r.data));
+}
+function setDone(id, on){
+  const el = document.getElementById(id);
+  if(el) el.classList.toggle('done', !!on);
+}
+
+function recalc(){
+  const di = document.getElementById('dataInicio').value;
+  const df = document.getElementById('dataFim').value;
+  const txt = periodoTexto();
+  document.getElementById('periodoBadge').textContent = txt ? txt.replace(' a ', ' — ') : 'Período não definido';
+  document.getElementById('periodoResumo').textContent = txt ? `Período: ${txt}` : 'Defina o período de apuração.';
+
+  const amil = getFilteredAmil();
+  const supermed = getFilteredSupermed();
+  const vidasAmil = amil.reduce((s,r)=>s+r.vidas,0);
+  const vidasSupermed = supermed.reduce((s,r)=>s+r.vidas,0);
+  const totalVidas = vidasAmil + vidasSupermed;
+  const temDados = !!(state.amilRows || state.supermedRows);
+
+  document.getElementById('kpiAmil').textContent = state.amilRows ? NUM(vidasAmil) : '—';
+  document.getElementById('kpiSupermed').textContent = state.supermedRows ? NUM(vidasSupermed) : '—';
+  document.getElementById('kpiVidas').textContent = temDados ? NUM(totalVidas) : '—';
+  document.getElementById('kpiValor').textContent = temDados ? BRL(totalVidas*100) : '—';
+  document.getElementById('cntAmil').textContent = state.amilRows ? `${NUM(amil.length)} propostas no período` : 'Relatório não carregado';
+  document.getElementById('cntSupermed').textContent = state.supermedRows ? `${NUM(supermed.length)} linhas ativas no período` : 'Relatório não carregado';
+
+  const pa = totalVidas ? (vidasAmil/totalVidas*100) : 0;
+  const ps = totalVidas ? (100-pa) : 0;
+  document.getElementById('barAmil').style.width = pa + '%';
+  document.getElementById('barSupermed').style.width = ps + '%';
+  document.getElementById('pctAmil').textContent = pa.toFixed(1).replace('.',',') + '%';
+  document.getElementById('pctSupermed').textContent = ps.toFixed(1).replace('.',',') + '%';
+
+  const ready = !!(di && df && temDados);
+  document.getElementById('btnExcel').disabled = !ready;
+  document.getElementById('btnPdf').disabled = !ready;
+  setDone('navPeriodo', di && df);
+  setDone('navRelatorios', temDados);
+  setDone('navResultado', ready);
+  setDone('navDetalhe', ready);
+
+  renderTable();
+}
+
+function renderTable(){
+  const tab = state.currentTab;
+  const wrap = document.getElementById('tabelaWrap');
+  const foot = document.getElementById('tabelaFoot');
+  const di = document.getElementById('dataInicio').value;
+  const df = document.getElementById('dataFim').value;
+  const src = tab === 'amil' ? state.amilRows : state.supermedRows;
+  let rows = tab === 'amil' ? getFilteredAmil() : getFilteredSupermed();
+
+  let msg = null;
+  if(!di || !df) msg = 'Defina o período de apuração.';
+  else if(!src) msg = `Suba o relatório da ${COLS[tab].nome}.`;
+  else if(!rows.length) msg = tab === 'amil' ? 'Nenhuma proposta implantada nesse período.' : 'Nenhuma linha ativa nesse período.';
+  if(msg){ wrap.innerHTML = `<div class="empty">${msg}</div>`; foot.innerHTML = ''; return; }
+
+  const termo = normHeader(document.getElementById('busca').value);
+  if(termo){
+    rows = rows.filter(r => normHeader([r.origem, r.proposta, r.corretor, r.titular].map(x=>x==null?'':x).join(' ')).includes(termo));
+  }
+  if(!rows.length){ wrap.innerHTML = '<div class="empty">Nenhum registro corresponde à busca.</div>'; foot.innerHTML = ''; return; }
+
+  wrap.innerHTML = tableHTML(tab, rows);
+  foot.innerHTML = totalLinha(rows);
+}
+
+// ---------- Destaque do menu lateral ----------
+(function(){
+  const links = document.querySelectorAll('.nav a');
+  if(!('IntersectionObserver' in window)) return;
+  const obs = new IntersectionObserver(entries=>{
+    entries.forEach(en=>{
+      if(en.isIntersecting){
+        links.forEach(a => a.classList.toggle('active', a.dataset.sec === en.target.id));
+      }
+    });
+  }, {rootMargin:'-20% 0px -65% 0px'});
+  document.querySelectorAll('section[id^="sec-"]').forEach(s => obs.observe(s));
+})();
+
+// ---------- Exportar Excel ----------
+document.getElementById('btnExcel').addEventListener('click', async ()=>{
+  const PLUM = 'FF743764', GOLD = 'FFFFD040', ZEBRA = 'FFF7F1F5', LINE = 'FFE6DCE3', WHITE = 'FFFFFFFF';
+  const wb = new ExcelJS.Workbook();
+  const di = document.getElementById('dataInicio').value;
+  const df = document.getElementById('dataFim').value;
+  const periodo = periodoTexto();
+  const amil = getFilteredAmil();
+  const supermed = getFilteredSupermed();
+  const vidasAmil = amil.reduce((s,r)=>s+r.vidas,0);
+  const vidasSupermed = supermed.reduce((s,r)=>s+r.vidas,0);
+  const totalVidas = vidasAmil + vidasSupermed;
+  const fmtMoeda = '"R$" #,##0.00';
+  const fill = argb => ({type:'pattern', pattern:'solid', fgColor:{argb}});
+
+  // Resumo (primeira aba)
+  const wsR = wb.addWorksheet('Resumo', {views:[{showGridLines:false}]});
+  wsR.mergeCells('A1:B1');
+  const t = wsR.getCell('A1');
+  t.value = 'Apuração de Campanha — Resumo';
+  t.font = {bold:true, size:14, color:{argb:WHITE}};
+  t.fill = fill(PLUM);
+  t.alignment = {vertical:'middle'};
+  wsR.getRow(1).height = 30;
+  const resumo = [
+    ['Período', periodo],
+    ['Vidas Amil', vidasAmil],
+    ['Vidas Supermed', vidasSupermed],
+    ['Total de vidas', totalVidas],
+    ['Valor por vida', 100],
+    ['Valor total', totalVidas*100],
+  ];
+  resumo.forEach((r,i)=>{
+    const row = wsR.addRow(r);
+    row.height = 22;
+    row.getCell(1).font = {bold:true, color:{argb:PLUM}};
+    row.getCell(2).alignment = {horizontal:'right'};
+    row.eachCell(c=>{ c.border = {bottom:{style:'thin', color:{argb:LINE}}}; if(i%2===1) c.fill = fill(ZEBRA); });
+    if(i === 4) row.getCell(2).numFmt = fmtMoeda;
+    if(i === 5){
+      row.getCell(2).numFmt = fmtMoeda;
+      row.eachCell(c=>{ c.fill = fill(GOLD); c.font = {bold:true, color:{argb:PLUM}}; });
+    }
+  });
+  wsR.getColumn(1).width = 22;
+  wsR.getColumn(2).width = 28;
+
+  function buildSheet(name, rows, headers, mapper){
+    const ws = wb.addWorksheet(name, {views:[{state:'frozen', ySplit:2, showGridLines:false}]});
+    const nCols = headers.length;
+    ws.mergeCells(1, 1, 1, nCols);
+    const title = ws.getCell(1, 1);
+    title.value = `Apuração de Campanha — ${name} — Período: ${periodo}`;
+    title.font = {bold:true, size:13, color:{argb:WHITE}};
+    title.fill = fill(PLUM);
+    title.alignment = {vertical:'middle'};
+    ws.getRow(1).height = 28;
+
+    const headerRow = ws.addRow(headers);
+    headerRow.height = 22;
+    headerRow.eachCell((c, i)=>{
+      c.font = {bold:true, color:{argb:PLUM}};
+      c.fill = fill(GOLD);
+      c.alignment = {vertical:'middle', horizontal: i >= nCols-1 ? 'right' : 'left'};
+    });
+
+    const data = rows.map(mapper);
+    data.forEach((vals, idx)=>{
+      const row = ws.addRow(vals);
+      row.eachCell({includeEmpty:true}, (c, i)=>{
+        c.border = {bottom:{style:'thin', color:{argb:LINE}}};
+        if(idx % 2 === 1) c.fill = fill(ZEBRA);
+        if(i >= nCols-1) c.alignment = {horizontal:'right'};
+      });
+      row.getCell(nCols).numFmt = fmtMoeda;
+    });
+
+    const totalVid = rows.reduce((s,r)=>s+r.vidas,0);
+    const totalRow = ws.addRow([]);
+    totalRow.height = 22;
+    totalRow.getCell(1).value = 'TOTAL';
+    totalRow.getCell(nCols-1).value = totalVid;
+    totalRow.getCell(nCols).value = totalVid*100;
+    totalRow.getCell(nCols).numFmt = fmtMoeda;
+    for(let i=1;i<=nCols;i++){
+      const c = totalRow.getCell(i);
+      c.fill = fill(PLUM);
+      c.font = {bold:true, color:{argb:WHITE}};
+      if(i >= nCols-1) c.alignment = {horizontal:'right'};
+    }
+
+    headers.forEach((h,i)=>{
+      let max = h.length;
+      data.forEach(v => { const s = String(v[i] == null ? '' : v[i]); if(s.length > max) max = s.length; });
+      ws.getColumn(i+1).width = Math.min(44, Math.max(14, max + 3));
+    });
+    if(rows.length) ws.autoFilter = {from:{row:2, column:1}, to:{row:2+rows.length, column:nCols}};
+    return ws;
+  }
+
+  buildSheet('Amil', amil, COLS.amil.head,
+    r => [r.origem ?? 'Amil', r.proposta, r.corretor, fmtDate(r.data), r.vidas, r.vidas*100]);
+  buildSheet('Supermed', supermed, COLS.supermed.head,
+    r => [r.proposta, r.titular, r.corretor, fmtDate(r.data), r.vidas, r.vidas*100]);
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Apuracao_Campanha_${di}_a_${df}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+});
+
+// ---------- Exportar PDF (impressão) ----------
+function buildPrintTables(){
+  const box = document.getElementById('printTables');
+  const di = document.getElementById('dataInicio').value;
+  const df = document.getElementById('dataFim').value;
+  if(!(di && df && (state.amilRows || state.supermedRows))){ box.innerHTML = ''; return; }
+  const sec = (tab, rows, src) => {
+    if(!src) return '';
+    const corpo = rows.length ? tableHTML(tab, rows) + `<div class="tfoot-bar">${totalLinha(rows)}</div>` : '<div class="empty">Nenhum registro no período.</div>';
+    return `<div class="print-sec"><h3>${COLS[tab].nome}</h3>${corpo}</div>`;
+  };
+  box.innerHTML =
+    `<p class="print-meta">Período de apuração: ${periodoTexto()} · Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>` +
+    sec('amil', getFilteredAmil(), state.amilRows) +
+    sec('supermed', getFilteredSupermed(), state.supermedRows);
+}
+window.addEventListener('beforeprint', buildPrintTables);
+window.addEventListener('afterprint', ()=>{ document.getElementById('printTables').innerHTML = ''; });
+document.getElementById('btnPdf').addEventListener('click', ()=>{
+  buildPrintTables();
+  window.print();
+});
+
+recalc();
+
+</script>
+</body>
+</html>
